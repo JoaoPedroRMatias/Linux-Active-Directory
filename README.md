@@ -88,4 +88,4 @@ E verificamos seu status:
 <code>sudo systemctl status sssd</code>
 
 <h2>Conclusão</h2>
-Com essas configurações será necessário apenas reiniciar a máquina e já será possivel acessar a máquina com seu usuário do AD.
+Com essas configurações será necessário apenas reiniciar a máquina e já será possivel acessar a mesma com seu usuário do AD.
