@@ -1,91 +1,99 @@
-<h1>Atrelar Ubuntu LTS 20.04 ao Active Directory do Windows Server</h1>
-Passo a passo de como configurar uma máquina linux (usaremos o Ubuntu LTS 20.04) para ser colocada em um domínio do Windows Server.
+<h1>Atrelar máquina Linux ao Active Directory</h1>
+Passo a passo de como configurar uma máquina Linux em um domínio do Active Directory.
 
-<h2>Preparações e pacotes</h2>
-Como em qualquer outra configuração grande em um sistema Linux, precisamos começar atualizando os pacotes que já possuimos na máquina, e assim instalar o que precisamos.
+<h2>Preparações e instalação de pacotes</h2>
+Comece atualizando os pacotes que já possuímos na máquina e, logo após, instale o que realmente precisamos. 
 
-Vamos começar atualizando as dependencias com o comando:
+Atualize as dependências com o comando:
 
+Debian<br>
 <code>sudo apt update</code>
 
-Prosseguimos para a instalação dos pacotes:
+RHEL<br>
+<code>sudo yum update</code>
 
-<code>sudo apt install -y realmd libnss-sss sssd sssd-tools adcli samba-common-bin oddjob oddjob-mkhomedir packagekit</code>
+E prossiga com a instalação dos pacotes:
 
-<h2>Definindo hostname e configurando DNS server </h2>
-<h3>hostname</h3>
-O sistema já possui um hostname, no qual escolhemos no momento da instalação da OS. Porém, precisamos setar esse nome no hostnamectl para que não tenhamos erros futuros.
+Debian<br>
+<code>sudo apt install -y realmd libnss-sss sssd sssd-tools adcli samba-common-bin oddjob oddjob-	mkhomedir packagekit</code>
 
-Usaremos o comando:
-
-<code>sudo hostnamectl set-hostname HOSTNAME-DA-MAQUINA</code>
-
-Obs.: Caso queira mudar o hostname, pode ser feito modificando o arquivo <code>/etc/hostname</code>.
-
-<h3>DNS server</h3>
-Vamos desabilitar os serviços de systemd-resolv.service, pois vamos utilizar nossas configurações do resolv.conf no dominio.
-
-Para desabilitar os serviços:
-
-<code>sudo systemctl disable systemd-resolved.service</code>
-
-<code>sudo systemctl stop systemd-resolved.service</code>
-
-E verificamos se realmente o serviço parou:
-
-<code>sudo systemctl status systemd-resolved.service</code>
-
-Com os serviços parados, vamos modificar as informações do arquivo <code>/etc/resolv.conf</code>, colocando na frente de nameserver o IP de nossa rede de domínio. Por exemplo:
-
-<img src="image/dnsResolveConfig.png">
+RHEL<br>
+<code>sudo dnf install realmd sssd oddjob oddjob-mkhomedir adcli samba-common-tools -y</code>
 
 <h2>Configurando o realm</h2>
-De forma resumindo, o realm nos ajuda a descobrir e controlar os dominios que possuimos na máquina, fazendo de forma segura a junção. 
+De forma resumida, o Realm nos ajuda a descobrir e controlar os domínios que possuímos na máquina.
 
-Ao começar, precisamos descobrir primeiro o dominio que estamos procurando em questão. Utilizando o comando:
+Para começar, precisamos primeiro descobrir o domínio que estamos procurando. 
+
+Utilize o seguinte comando:
 
 <code>realm discover NOME-DO-DOMINIO</code>
 
-Vamos ter uma resposta como essa:
+Teremos uma resposta semelhante a esta:
 
 <img src="image/realmDiscover.png">
-<p>
 
-Agora que estamos conectador ao dominio, vamos precisar logar nele com um usuário. Vamos usar o comando:
+Agora que descobrimos o domínio, precisaremos fazer login nele com um usuário. Utilize o seguinte comando:
 
 <code>sudo realm join -U USUARIO DOMINIO</code>
 
-Se não houve erros até o presente momento, podemos verificar se realmente nos conectamos, usando o comando a baixo para verificar as permissões e grupos do usuário.
+Se até o momento não ocorreram erros, podemos verificar se realmente estamos conectados, utilizando o comando abaixo para verificar as permissões e grupos do usuário.
 
 <code>id USUARIO@DOMINIO</code>
 
-Outro meio para verificar se está tudo dando certo, é o:
+Outro método para verificar se está tudo ocorrendo corretamente é o seguinte:
 
 <code>realm list</code>
 
-Assim verificamos se estamos com o domínio que desejamos já conectado.
+Dessa forma, verificamos se já estamos conectados ao domínio desejado.
 
-<h2>pam-configs</h2>
-Devemos tomar muito cuidado para mexer nos arquivos de pam-configs, pois qualquer erro pode ser custoso para consertar, levando muitas vezes a quebra da OS.
-<p>
+<h2>Pam-configs (ubuntu)</h2>
 
-Para configurar modificamos o arquivo <code>/usr/share/pam-configs/mkhomedir</code>, onde mudamos <code>Default: no</code> para <code>yes</code>, <code>Priority: 0</code> para <code>900</code> e apagamos a linha <code>Session-Interactive-Only: yes</code>. <strong>E não modificamos mais nenhuma informação!</strong>
+A configuração no pam-configs foi necessária apenas no Ubuntu para que a pasta do usuário seja criada no momento em que ele entra no sistema.
 
-Outra mudança importante é nas configurações de update do pam, usamos o comando:
+Apenas é necessário executar o comando:
 
-<code>sudo pam-auth-update</code>
+<code>sudo pam-auth-update --enable mkhomedir</code>
 
-E aceitamos apenas opção <code>Create home directory on login</code>. A imagem a baixo mostra como fica as opções da interface grafica.
+<h2>Configurando SSSD</h2>
 
-<img src="image/pamUpdate.png">
+Devemos acessar o arquivo <code>/etc/sssd/sssd.conf</code> para realizar as modificações. Nele, vamos alterar a opção <code>use_fully_qualified_names</code> de <code>False</code> para <code>True</code>. Com essa opção ativada, os usuários estarão no formato user@domain, em vez de apenas user.
 
-Por fim reiniciamos o serviço sssd, com os comandos:
+No nosso caso, vamos alterar para True, pois possuímos apenas um AD. No entanto, observe que essa alteração deve ser feita somente se você tiver certeza de que nenhum outro domínio será adicionado à floresta do AD.
 
-<code>sudo systemctl restart sssd</code>
+Em <code>fallback_homedir = /home/%u@%d</code>, vamos modificar para <code>fallback_homedir = /home/%u</code>. Removendo o "@%d", a pasta do usuário será criada apenas com o nome do usuário.
 
-E verificamos seu status:
+Na opção <code>access_provider = ad</code>, muda-se para <code>access_provider = simple</code>.
 
-<code>sudo systemctl status sssd</code>
+Agora vamos adicionar uma opção que não está presente em nosso arquivo, que é o <code>simple_allow_groups</code>. Nessa opção, vamos adicionar os grupos que temos no AD e desejamos que tenham acesso à máquina Linux.
 
+No nosso caso, temos dois grupos: linuxuser e linuxadmin. Para adicioná-los, devemos incluir <code>simple_allow_groups = linuxuser, linuxadmin</code> no arquivo.
+
+Como resultado, o arquivo ficará da seguinte maneira:
+
+<img src="image/sssdConfiguration.png">
+
+Observação: nos lugares onde está escrito "Domain.local", deve ser o domínio que você está integrando ao sistema. E em "simple_allow_users = groups, linuxuser, linuxadmin" é uma opção adicionada automaticamente no próximo item.
+
+Assim, finalizando o processo de configuração do SSSD, vamos permitir o acesso dos usuários que estão nos grupos que adicionamos em simple_allow_groups. Utilize os seguintes comandos:
+
+<code>realm permit [group]</code>
+
+Exemplo:
+
+<code>realm permit linuxuser</code>
+
+<code>realm permit linuxadmin</code>
+
+<h2>SUDOERS</h2>
+
+
+Com os processos realizados nos itens acima, já conseguiremos acessar a máquina utilizando o usuário do AD. No entanto, ele não terá acesso root no sistema. Para resolver isso, devemos adicionar os grupos dentro do arquivo /etc/sudoers. O resultado será o seguinte:
+
+<img src="image/sudoers.png">
+
+Adicionamos o grupo %linuxuser para permitir que todos os usuários do grupo linuxuser possam acessar a máquina e obter acesso root.
+
+---
 <h2>Conclusão</h2>
-Com essas configurações será necessário apenas reiniciar a máquina e já será possivel acessar a mesma com seu usuário do AD.
+Ao seguir essas etapas, os usuários do Active Directory poderão autenticar-se na máquina Linux e ter os privilégios adequados. Certifique-se sempre de seguir as melhores práticas de segurança ao realizar essas configurações.
